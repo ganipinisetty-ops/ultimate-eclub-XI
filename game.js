@@ -2476,6 +2476,43 @@ player.id,
 index
 );
 
+/* TOUCH / MOUSE DRAG SWAP */
+node.style.touchAction = "none";
+node.addEventListener("pointerdown", event => {
+
+ event.preventDefault();
+ node.setPointerCapture(event.pointerId);
+ node.classList.add("dragging");
+ node.dataset.dragIndex = index;
+});
+
+node.addEventListener("pointerup", event => {
+
+ event.preventDefault();
+ node.classList.remove("dragging");
+
+ const target = document.elementFromPoint(event.clientX,event.clientY);
+ const targetNode = target && target.closest(".squad-player-node");
+
+ if(targetNode && targetNode !== node) {
+   const targetIndex = [...pitch.querySelectorAll(".squad-player-node")].indexOf(targetNode);
+   if(targetIndex >= 0 && targetIndex !== index) {
+     const temp = gameState.starters[index];
+     gameState.starters[index] = gameState.starters[targetIndex];
+     gameState.starters[targetIndex] = temp;
+     saveGame();
+     renderSquad();
+     updateAllUI();
+     showToast("Players swapped!");
+     return;
+   }
+ }
+});
+
+node.addEventListener("pointercancel", () => {
+ node.classList.remove("dragging");
+});
+
 const face =
 document.createElement(
 "div"
@@ -2957,6 +2994,12 @@ REPLACE PLAYER
 
 <button
 class="secondary-button"
+onclick="openCompareSelection()">
+COMPARE
+</button>
+
+<button
+class="secondary-button"
 onclick="closePlayerModal()">
 CLOSE
 </button>
@@ -2990,6 +3033,300 @@ document
 );
 
 }
+
+/* =========================================================
+   COMPARE PLAYER
+   ========================================================= */
+
+function openCompareSelection() {
+
+const currentPlayer =
+getPlayer(selectedPlayerId);
+
+if(!currentPlayer) {
+return;
+}
+
+const content =
+document.getElementById(
+"playerModalContent"
+);
+
+const clubIds = [
+...gameState.starters,
+...gameState.reserved
+];
+
+const uniqueIds =
+[...new Set(clubIds)]
+.filter(id => id !== currentPlayer.id);
+
+content.innerHTML = `
+
+<div style="text-align:center;">
+
+<div class="detail-name">
+COMPARE PLAYER
+</div>
+
+<div class="detail-meta" style="margin-top:6px;">
+Choose a player from your team to compare with
+${currentPlayer.name}
+</div>
+
+<div style="
+display:grid;
+grid-template-columns:repeat(2,1fr);
+gap:10px;
+margin-top:20px;
+">
+
+${
+uniqueIds.map(id => {
+
+const player =
+getPlayer(id);
+
+if(!player) {
+return "";
+}
+
+return `
+
+<button
+class="secondary-button"
+style="
+padding:12px;
+text-align:left;
+"
+onclick="showPlayerComparison('${currentPlayer.id}','${player.id}')">
+
+<div style="font-size:28px;">
+${player.emoji}
+</div>
+
+<div style="font-weight:900;">
+${player.name}
+</div>
+
+<div style="font-size:11px;color:#a6b3c9;">
+${player.ovr} OVR • ${player.position}
+</div>
+
+</button>
+
+`;
+
+}).join("")
+}
+
+</div>
+
+<div style="margin-top:18px;">
+
+<button
+class="secondary-button"
+onclick="openPlayerDetails('${currentPlayer.id}','club')">
+BACK
+</button>
+
+</div>
+
+</div>
+
+`;
+}
+
+
+/* =========================================================
+   SHOW PLAYER COMPARISON
+   ========================================================= */
+
+function showPlayerComparison(
+firstId,
+secondId
+) {
+
+const first =
+getPlayer(firstId);
+
+const second =
+getPlayer(secondId);
+
+if(!first || !second) {
+return;
+}
+
+const content =
+document.getElementById(
+"playerModalContent"
+);
+
+const stats = [
+["OVR","ovr"],
+["Pace","pace"],
+["Shooting","shooting"],
+["Passing","passing"],
+["Dribbling","dribbling"],
+["Defending","defending"],
+["Physical","physical"]
+];
+
+content.innerHTML = `
+
+<div style="text-align:center;">
+
+<div class="detail-name">
+PLAYER COMPARISON
+</div>
+
+<div style="
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:12px;
+margin-top:18px;
+">
+
+<div>
+${playerCardHTML(first,"")}
+<div style="
+font-weight:900;
+margin-top:8px;
+">
+${first.name}
+</div>
+</div>
+
+<div>
+${playerCardHTML(second,"")}
+<div style="
+font-weight:900;
+margin-top:8px;
+">
+${second.name}
+</div>
+</div>
+
+</div>
+
+<div style="
+margin-top:20px;
+">
+
+${
+stats.map(stat => {
+
+const firstValue =
+Number(first[stat[1]]) || 0;
+
+const secondValue =
+Number(second[stat[1]]) || 0;
+
+const firstBetter =
+firstValue > secondValue;
+
+const secondBetter =
+secondValue > firstValue;
+
+return `
+
+<div style="
+display:grid;
+grid-template-columns:1fr 1fr 1fr;
+align-items:center;
+padding:10px 5px;
+border-bottom:1px solid #17243b;">
+
+<div style="
+font-size:18px;
+font-weight:900;
+${firstBetter ? "color:#ffe06d;" : ""}
+">
+${firstValue}
+</div>
+
+<div style="
+font-size:10px;
+font-weight:900;
+color:#8290a8;
+">
+${stat[0]}
+</div>
+
+<div style="
+font-size:18px;
+font-weight:900;
+${secondBetter ? "color:#ffe06d;" : ""}
+">
+${secondValue}
+</div>
+
+</div>
+
+`;
+
+}).join("")
+}
+
+</div>
+
+<div style="
+margin-top:18px;
+">
+
+<div style="
+text-align:left;
+padding:12px;
+border:1px solid #17243b;
+border-radius:12px;
+">
+
+<div style="font-weight:900;margin-bottom:8px;">CARD DETAILS</div>
+
+<div style="font-size:12px;line-height:1.8;color:#a6b3c9;">
+
+<b>${first.name}</b> — ${first.nation} • ${first.position} • ${first.type}<br>
+Preferred Foot: ${first.foot} • Skill Moves: ${first.skills} ★<br>
+Alternative Positions: ${(first.alternative || []).join(" • ")}
+
+<br><br>
+
+<b>${second.name}</b> — ${second.nation} • ${second.position} • ${second.type}<br>
+Preferred Foot: ${second.foot} • Skill Moves: ${second.skills} ★<br>
+Alternative Positions: ${(second.alternative || []).join(" • ")}
+
+</div>
+
+</div>
+
+</div>
+
+<div style="
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:10px;
+margin-top:18px;
+">
+
+<button
+class="secondary-button"
+onclick="openCompareSelection()">
+CHOOSE ANOTHER
+</button>
+
+<button
+class="secondary-button"
+onclick="openPlayerDetails('${first.id}','club')">
+BACK
+</button>
+
+</div>
+
+</div>
+
+`;
+}
+
 
 /* =========================================================
    OPEN REPLACE
@@ -3756,11 +4093,20 @@ ${currentDraftPlayer.type}
 
 <button
 class="big-button reveal-button"
-onclick="finishDraft()">
+onclick="finishDraft(false)">
 
 ADD TO CLUB
 
 </button>
+
+<div style="margin-top:16px;font-weight:900;">
+Do you want to open the draft again?
+</div>
+
+<div style="display:flex;gap:10px;margin-top:10px;">
+<button class="big-button reveal-button" onclick="finishDraft(true)">OPEN AGAIN</button>
+<button class="big-button" onclick="finishDraft(false)">NOT NOW</button>
+</div>
 
 `;
 
@@ -3770,7 +4116,7 @@ ADD TO CLUB
    FINISH DRAFT
    ========================================================= */
 
-function finishDraft() {
+function finishDraft(openAgain=false) {
 
 if(!currentDraftPlayer) {
 
@@ -3834,6 +4180,7 @@ saveGame();
 const playerName =
 currentDraftPlayer.name;
 
+const shouldOpenAgain = openAgain;
 currentDraftPlayer = null;
 
 draftBusy = false;
@@ -3850,6 +4197,10 @@ showToast(
 playerName +
 " added to your club!"
 );
+
+if(shouldOpenAgain) {
+setTimeout(() => openDraft(), 250);
+}
 
 }
 
@@ -4709,6 +5060,17 @@ document.createElement(
 node.className =
 "match-player user";
 
+const playerImage = player.image || player.cardImage;
+if(playerImage) {
+ const img = document.createElement("img");
+ img.src = playerImage;
+ img.alt = player.name;
+ img.draggable = false;
+ img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%;";
+ node.textContent = "";
+ node.appendChild(img);
+}
+
 if(index === 0) {
 
 node.classList.add(
@@ -5167,6 +5529,7 @@ message;
 
 }
 );
+
 /* =========================================================
    THROUGH
    ========================================================= */
@@ -5207,6 +5570,7 @@ message;
 
 }
 );
+
 /* =========================================================
    SPRINT / SKILLS
    ========================================================= */
@@ -5223,7 +5587,7 @@ Math.abs(dy) < 20
 ) {
 
 moveMatchPlayer(
-2.5,
+1.2,
 0
 );
 
@@ -6208,6 +6572,44 @@ String(secs)
 .padStart(2,"0")
 );
 
+}
+
+/* =========================================================
+   3-WEEK EVENT — 10 FEATURED 107 OVR PLAYERS
+   ========================================================= */
+const FEATURED_EVENT_PLAYERS = {
+  week1: [
+    {name:"Icon Player 1", type:"ICON", ovr:107},
+    {name:"Icon Player 2", type:"ICON", ovr:107},
+    {name:"Hero Player 1", type:"HERO", ovr:107}
+  ],
+  week2: [
+    {name:"Present Player 1", type:"PRESENT", ovr:107},
+    {name:"Present Player 2", type:"PRESENT", ovr:107},
+    {name:"Icon Player 3", type:"ICON", ovr:107}
+  ],
+  week3: [
+    {name:"Icon Player 4", type:"ICON", ovr:107},
+    {name:"Icon Player 5", type:"ICON", ovr:107},
+    {name:"Present Player 3", type:"PRESENT", ovr:107},
+    {name:"Hero Player 2", type:"HERO", ovr:107}
+  ]
+};
+
+function renderFeaturedEventPlayers() {
+ const page = document.getElementById("events");
+ if(!page || document.getElementById("featured107Panel")) return;
+ const panel = document.createElement("div");
+ panel.className = "panel";
+ panel.id = "featured107Panel";
+ panel.innerHTML = "<h2 class=\"panel-title\">107 OVR FEATURED PLAYERS</h2>" +
+   ["week1","week2","week3"].map((week,i) => {
+     const players = FEATURED_EVENT_PLAYERS[week];
+     return "<div style=\"margin:18px 0\"><h3>WEEK " + (i+1) + "</h3><div class=\"player-grid\">" +
+       players.map(p => "<div class=\"player-card\"><div class=\"player-card-ovr\">"+p.ovr+"</div><div style=\"font-size:12px\">"+p.type+"</div><strong>"+p.name+"</strong></div>").join("") +
+       "</div></div>";
+   }).join("");
+ page.appendChild(panel);
 }
 
 /* =========================================================
